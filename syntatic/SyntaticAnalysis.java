@@ -546,8 +546,39 @@ public class SyntaticAnalysis {
 
         if (current.type == TokenType.COLON) {
             advance();
+        } else if (current.type == TokenType.CLOSE_BRA) {
+            // Do nothing
+        } else {
+            Lexeme prev = current;
+            advance();
 
+            if (prev.type == TokenType.NAME && current.type == TokenType.COLON) {
+                rollback();
+
+                procName();
+                eat(TokenType.COLON);
+                procExpr();
+
+                while (current.type == TokenType.COMMA) {
+                    advance();
+
+                    procName();
+                    eat(TokenType.COMMA);
+                    procExpr();
+                }
+            } else {
+                rollback();
+
+                procExpr();
+
+                while (current.type == TokenType.COMMA) {
+                    advance();
+                    procExpr();
+                }
+            }
         }
+
+        eat(TokenType.CLOSE_BRA);
     }
 
     private void procName() {
