@@ -22,28 +22,30 @@ public class SyntaticAnalysis {
     }
 
     public Command start() {
+        procCode();
+        eat(TokenType.END_OF_FILE);
         return null;
     }
 
     private void rollback() {
         assert !history.isEmpty();
 
-        // System.out.println("Rollback (\"" + current.token + "\", " +
-        // current.type + ")");
+        System.out.println("Rollback (\"" + current.token + "\", " +
+                current.type + ")");
         queued.push(current);
         current = history.pop();
     }
 
     private void advance() {
-        // System.out.println("Advanced (\"" + current.token + "\", " +
-        // current.type + ")");
+        System.out.println("Advanced (\"" + current.token + "\", " +
+                current.type + ")");
         history.add(current);
         current = queued.isEmpty() ? lex.nextToken() : queued.pop();
     }
 
     private void eat(TokenType type) {
-        // System.out.println("Expected (..., " + type + "), found (\"" +
-        // current.token + "\", " + current.type + ")");
+        System.out.println("Expected (..., " + type + "), found (\"" +
+                current.token + "\", " + current.type + ")");
         if (type == current.type) {
             history.add(current);
             current = queued.isEmpty() ? lex.nextToken() : queued.pop();
@@ -157,7 +159,6 @@ public class SyntaticAnalysis {
 
     // <decl-type1> ::= <name> [ '=' <expr> ] { ',' <name> [ '=' <expr> ] }
     private void procDeclType1() {
-        advance();
         procName();
 
         if (current.type == TokenType.ASSIGN) {
@@ -195,8 +196,10 @@ public class SyntaticAnalysis {
     private void procPrint() {
         if (current.type == TokenType.PRINT) {
             advance();
+        } else if (current.type == TokenType.PRINTLN) {
+            advance();
         } else {
-            eat(TokenType.PRINTLN);
+            showError();
         }
 
         eat(TokenType.OPEN_PAR);
@@ -227,25 +230,115 @@ public class SyntaticAnalysis {
         procBody();
     }
 
-    // <for> ::= for '(' [ ( <def> | <assign> ) { ',' ( <def> | <assign> ) } ] ';'
-    // [ <expr> ] ';' [ <assign> { ',' <assign> } ] ')' <body>
+    // <for> ::= for '(' [ ( <def> | <assign> ) { ',' ( <def> | <assign> ) } ] ';' [
+    // <expr> ] ';' [ <assign> { ',' <assign> } ] ')' <body>
     private void procFor() {
+        // TODO: REVISAR TODO O FOR.
+
+        eat(TokenType.FOR);
+        eat(TokenType.OPEN_PAR);
+
+        if (current.type == TokenType.DEF || current.type == TokenType.ASSIGN) {
+            procDecl();
+
+            while (current.type == TokenType.COMMA) {
+                advance();
+
+                if (current.type == TokenType.DEF || current.type == TokenType.ASSIGN) {
+                    procDecl();
+                } else {
+                    showError();
+                }
+
+            }
+
+        }
+
+        eat(TokenType.SEMI_COLON);
+
+        // TODO: Não sei definir se é uma expr.
+
+        if (current.type == TokenType.NUMBER || current.type == TokenType.TEXT ||
+                current.type == TokenType.NAME || current.type == TokenType.OPEN_PAR ||
+                current.type == TokenType.OPEN_BRA || current.type == TokenType.NOT ||
+                current.type == TokenType.SUB || current.type == TokenType.FALSE ||
+                current.type == TokenType.TRUE) {
+            procExpr();
+
+        }
+
+        eat(TokenType.SEMI_COLON);
+
+        if (current.type == TokenType.DEF || current.type == TokenType.ASSIGN) {
+            procDecl();
+
+            while (current.type == TokenType.COMMA) {
+                advance();
+
+                if (current.type == TokenType.DEF || current.type == TokenType.ASSIGN) {
+                    procDecl();
+                } else {
+                    showError();
+                }
+            }
+
+        } else {
+            showError();
+        }
+
+        eat(TokenType.CLOSE_PAR);
+
+        procBody();
 
     }
 
     // <foreach> ::= foreach '(' [ def ] <name> in <expr> ')' <body>
     private void procForeach() {
+        eat(TokenType.FOREACH);
+        eat(TokenType.OPEN_PAR);
 
+        if (current.type == TokenType.DEF) {
+            advance();
+        }
+
+        procName();
+        eat(TokenType.CONTAINS);
+        procExpr();
+
+        eat(TokenType.CLOSE_PAR);
+
+        procBody();
     }
 
     // <body> ::= <cmd> | '{' <code> '}'
     private void procBody() {
+        if (current.type == TokenType.OPEN_CUR) {
+            advance();
+
+            procCode();
+            eat(TokenType.CLOSE_CUR);
+        } else {
+            procCmd();
+        }
 
     }
 
-    // <assign> ::= [ <expr> ( '=' | '+=' | '-=' | '*=' | '/=' | '%=' | '**=') ]
-    // <expr>
+    // <assign> ::= <expr> ( '=' | '+=' | '-=' | '*=' | '/=' | '%=' | '**=') <expr>
     private void procAssign() {
+        procExpr();
+
+        if (current.type == TokenType.ASSIGN
+                || current.type == TokenType.ASSIGN_ADD
+                || current.type == TokenType.ASSIGN_SUB
+                || current.type == TokenType.ASSIGN_MUL
+                || current.type == TokenType.ASSIGN_DIV
+                || current.type == TokenType.ASSIGN_MOD
+                || current.type == TokenType.ASSIGN_POWER) {
+
+            advance();
+
+            procAssign();
+        }
 
     }
 
@@ -254,11 +347,8 @@ public class SyntaticAnalysis {
         procRel();
         while (current.type == TokenType.AND ||
                 current.type == TokenType.OR) {
-            if (current.type == TokenType.AND) {
-                advance();
-            } else {
-                advance();
-            }
+
+            advance();
 
             procRel();
         }
@@ -267,34 +357,76 @@ public class SyntaticAnalysis {
     // <rel> ::= <cast> [ ('<' | '>' | '<=' | '>=' | '==' | '!=' | in | '!in')
     // <cast> ]
     private void procRel() {
+        procCast();
 
+        if (current.type == TokenType.LOWER ||
+                current.type == TokenType.GREATER ||
+                current.type == TokenType.LOWER_EQUAL ||
+                current.type == TokenType.GREATER_EQUAL ||
+                current.type == TokenType.EQUALS ||
+                current.type == TokenType.NOT_EQUALS ||
+                current.type == TokenType.CONTAINS ||
+                current.type == TokenType.NOT_CONTAINS) {
+
+            advance();
+            procCast();
+
+        }
     }
 
     // <cast> ::= <arith> [ as ( Boolean | Integer | String) ]
     private void procCast() {
+        procArith();
+
+        if (current.type == TokenType.AS) {
+            advance();
+
+            if (current.type == TokenType.BOOLEAN ||
+                    current.type == TokenType.INTEGER ||
+                    current.type == TokenType.STRING) {
+                advance();
+            } else {
+                showError();
+            }
+        }
 
     }
 
     // <arith> ::= <term> { ('+' | '-') <term> }
     private void procArith() {
+        procTerm();
+
+        while (current.type == TokenType.ADD || current.type == TokenType.SUB) {
+            advance();
+            procTerm();
+        }
 
     }
 
     // <term> ::= <power> { ('*' | '/' | '%') <power> }
     private void procTerm() {
+        procPower();
+
+        while (current.type == TokenType.MUL || current.type == TokenType.DIV || current.type == TokenType.MOD) {
+            advance();
+            procPower();
+        }
 
     }
 
     // <power> ::= <factor> { '**' <factor> }
     private void procPower() {
+        procFactor();
 
+        while (current.type == TokenType.POWER) {
+            advance();
+            procFactor();
+        }
     }
 
     // <factor> ::= [ '!' | '-' ] ( '(' <expr> ')' | <rvalue> )
     private void procFactor() {
-        if (current.type == TokenType.NOT) {
-            advance();
-        } else if (current.type == TokenType.SUB) {
+        if (current.type == TokenType.NOT || current.type == TokenType.SUB) {
             advance();
         }
 
@@ -309,6 +441,19 @@ public class SyntaticAnalysis {
 
     // <lvalue> ::= <name> { '.' <name> | '[' <expr> ']' }
     private void procLvalue() {
+        procName();
+
+        while (current.type == TokenType.DOT ||
+                current.type == TokenType.OPEN_BRA) {
+            if (current.type == TokenType.DOT) {
+                advance();
+                procName();
+            } else {
+                advance();
+                procExpr();
+                eat(TokenType.CLOSE_BRA);
+            }
+        }
     }
 
     // <rvalue> ::= <const> | <function> | <switch> | <struct> | <lvalue>
@@ -358,6 +503,15 @@ public class SyntaticAnalysis {
 
     // <function> ::= (read | empty | size | keys | values) '(' <expr> ')'
     private void procFunction() {
+        if (current.type == TokenType.READ ||
+                current.type == TokenType.EMPTY ||
+                current.type == TokenType.SIZE ||
+                current.type == TokenType.KEYS ||
+                current.type == TokenType.VALUES) {
+            advance();
+        } else {
+            showError();
+        }
 
     }
 
@@ -388,7 +542,12 @@ public class SyntaticAnalysis {
     // <struct> ::= '[' [ ':' | <expr> { ',' <expr> } | <name> ':' <expr> { ','
     // <name> ':' <expr> } ] ']'
     private void procStruct() {
+        eat(TokenType.OPEN_BRA);
 
+        if (current.type == TokenType.COLON) {
+            advance();
+
+        }
     }
 
     private void procName() {

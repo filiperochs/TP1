@@ -91,6 +91,8 @@ public class LexicalAnalysis implements AutoCloseable {
                         state = 15;
                     }
 
+                    System.out.println("CASE 1: " + lex.token);
+
                     break;
                 case 2:
                     if (c == '=') {
