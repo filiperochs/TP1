@@ -1,11 +1,25 @@
 package syntatic;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Stack;
+
+import interpreter.command.BlocksCommand;
 import interpreter.command.Command;
+import interpreter.command.DeclarationCommand;
+import interpreter.command.DeclarationType1Command;
+import interpreter.command.DeclarationType2Command;
+import interpreter.command.PrintCommand;
+import interpreter.expr.ConstExpr;
+import interpreter.expr.Expr;
+import interpreter.expr.Variable;
+import interpreter.value.BooleanValue;
+import interpreter.value.NumberValue;
+import interpreter.value.TextValue;
+import interpreter.value.Value;
 import lexical.Lexeme;
 import lexical.LexicalAnalysis;
 import lexical.TokenType;
-
-import java.util.Stack;
 
 public class SyntaticAnalysis {
 
@@ -22,30 +36,30 @@ public class SyntaticAnalysis {
     }
 
     public Command start() {
-        procCode();
+        Command cmd = procCode();
         eat(TokenType.END_OF_FILE);
-        return null;
+        return cmd;
     }
 
     private void rollback() {
         assert !history.isEmpty();
 
-        System.out.println("Rollback (\"" + current.token + "\", " +
-                current.type + ")");
+        // System.out.println("Rollback (\"" + current.token + "\", " +
+        // current.type + ")");
         queued.push(current);
         current = history.pop();
     }
 
     private void advance() {
-        System.out.println("Advanced (\"" + current.token + "\", " +
-                current.type + ")");
+        // System.out.println("Advanced (\"" + current.token + "\", " +
+        // current.type + ")");
         history.add(current);
         current = queued.isEmpty() ? lex.nextToken() : queued.pop();
     }
 
     private void eat(TokenType type) {
-        System.out.println("Expected (..., " + type + "), found (\"" +
-                current.token + "\", " + current.type + ")");
+        // System.out.println("Expected (..., " + type + "), found (\"" +
+        // current.token + "\", " + current.type + ")");
         if (type == current.type) {
             history.add(current);
             current = queued.isEmpty() ? lex.nextToken() : queued.pop();
@@ -74,7 +88,11 @@ public class SyntaticAnalysis {
     }
 
     // <code> ::= { <cmd> }
-    private void procCode() {
+    private BlocksCommand procCode() {
+        int line = lex.getLine();
+
+        List<Command> cmds = new ArrayList<Command>();
+
         while (current.type == TokenType.DEF ||
                 current.type == TokenType.PRINT ||
                 current.type == TokenType.PRINTLN ||
@@ -98,19 +116,28 @@ public class SyntaticAnalysis {
                 current.type == TokenType.SWITCH ||
                 current.type == TokenType.OPEN_BRA ||
                 current.type == TokenType.NAME) {
-            procCmd();
+            Command c = procCmd();
+            cmds.add(c);
         }
+
+        BlocksCommand bc = new BlocksCommand(line, cmds);
+        return bc;
     }
 
     // <cmd> ::= <decl> | <print> | <if> | <while> | <for> | <foreach> | <assign>
-    private void procCmd() {
+    private Command procCmd() {
+
+        Command cmd = null;
+
         switch (current.type) {
             case DEF:
-                procDecl();
+                DeclarationCommand dc = procDecl();
+                cmd = dc;
                 break;
             case PRINT:
             case PRINTLN:
-                procPrint();
+                PrintCommand pc = procPrint();
+                cmd = pc;
                 break;
             case IF:
                 procIf();
@@ -145,66 +172,95 @@ public class SyntaticAnalysis {
             default:
                 showError();
         }
+
+        return cmd;
     }
 
     // <decl> ::= def ( <decl-type1> | <decl-type2> )
-    private void procDecl() {
+    private DeclarationCommand procDecl() {
         eat(TokenType.DEF);
+
+        DeclarationCommand dc = null;
+
         if (current.type == TokenType.NAME) {
-            procDeclType1();
+            dc = procDeclType1();
         } else {
-            procDeclType2();
+            dc = procDeclType2();
         }
+
+        return dc;
     }
 
     // <decl-type1> ::= <name> [ '=' <expr> ] { ',' <name> [ '=' <expr> ] }
-    private void procDeclType1() {
-        procName();
+    private DeclarationType1Command procDeclType1() {
+        Variable lhs = procName();
+        int line = lex.getLine();
+
+        Expr rhs = null;
 
         if (current.type == TokenType.ASSIGN) {
             advance();
-            procExpr();
+            rhs = procExpr();
         }
 
         while (current.type == TokenType.COMMA) {
             advance();
-            procName();
+            lhs = procName();
 
             if (current.type == TokenType.ASSIGN) {
                 advance();
-                procExpr();
+                rhs = procExpr();
             }
         }
+
+        DeclarationType1Command dt1c = new DeclarationType1Command(line, lhs, rhs);
+        return dt1c;
     }
 
-    // <decl-type2> ::= '(' <name> { ',' <name> } ')' = <expr>
-    private void procDeclType2() {
+    // <decl-type2> ::= '(' <name> { ',' <name> } ')' '=' <expr>
+    private DeclarationType2Command procDeclType2() {
         eat(TokenType.OPEN_PAR);
-        procName();
+
+        List<Variable> lhs = new ArrayList<Variable>();
+        int line = lex.getLine();
+
+        Variable v = procName();
+        lhs.add(v);
 
         while (current.type == TokenType.COMMA) {
             advance();
-            procName();
+            v = procName();
+            lhs.add(v);
         }
 
         eat(TokenType.CLOSE_PAR);
         eat(TokenType.ASSIGN);
-        procExpr();
+        Expr rhs = procExpr();
+
+        DeclarationType2Command dt2c = new DeclarationType2Command(line, lhs, rhs);
+        return dt2c;
     }
 
     // <print> ::= (print | println) '(' <expr> ')'
-    private void procPrint() {
+    private PrintCommand procPrint() {
+        boolean newline = false;
         if (current.type == TokenType.PRINT) {
             advance();
         } else if (current.type == TokenType.PRINTLN) {
+            newline = true;
             advance();
         } else {
             showError();
         }
 
+        int line = lex.getLine();
         eat(TokenType.OPEN_PAR);
-        procExpr();
+
+        Expr expr = procExpr();
         eat(TokenType.CLOSE_PAR);
+
+        PrintCommand pc = new PrintCommand(line, newline, expr);
+        return pc;
     }
 
     // <if> ::= if '(' <expr> ')' <body> [ else <body> ]
@@ -233,19 +289,27 @@ public class SyntaticAnalysis {
     // <for> ::= for '(' [ ( <def> | <assign> ) { ',' ( <def> | <assign> ) } ] ';' [
     // <expr> ] ';' [ <assign> { ',' <assign> } ] ')' <body>
     private void procFor() {
-        // TODO: REVISAR TODO O FOR.
+        // TODO: REVISAR.
 
         eat(TokenType.FOR);
         eat(TokenType.OPEN_PAR);
 
-        if (current.type == TokenType.DEF || current.type == TokenType.ASSIGN) {
-            procDecl();
+        if (current.type == TokenType.DEF || current.type == TokenType.NAME) {
+            if (current.type == TokenType.DEF) {
+                procDecl();
+            } else {
+                procAssign();
+            }
 
             while (current.type == TokenType.COMMA) {
                 advance();
 
-                if (current.type == TokenType.DEF || current.type == TokenType.ASSIGN) {
-                    procDecl();
+                if (current.type == TokenType.DEF || current.type == TokenType.NAME) {
+                    if (current.type == TokenType.DEF) {
+                        procDecl();
+                    } else {
+                        procAssign();
+                    }
                 } else {
                     showError();
                 }
@@ -256,34 +320,34 @@ public class SyntaticAnalysis {
 
         eat(TokenType.SEMI_COLON);
 
-        // TODO: Não sei definir se é uma expr.
-
-        if (current.type == TokenType.NUMBER || current.type == TokenType.TEXT ||
-                current.type == TokenType.NAME || current.type == TokenType.OPEN_PAR ||
-                current.type == TokenType.OPEN_BRA || current.type == TokenType.NOT ||
-                current.type == TokenType.SUB || current.type == TokenType.FALSE ||
-                current.type == TokenType.TRUE) {
+        // verificar se é <expr>
+        if (current.type == TokenType.OPEN_PAR || current.type == TokenType.NAME) {
             procExpr();
-
         }
 
         eat(TokenType.SEMI_COLON);
 
-        if (current.type == TokenType.DEF || current.type == TokenType.ASSIGN) {
-            procDecl();
+        if (current.type == TokenType.DEF || current.type == TokenType.NAME) {
+            if (current.type == TokenType.DEF) {
+                procDecl();
+            } else {
+                procAssign();
+            }
 
             while (current.type == TokenType.COMMA) {
                 advance();
 
-                if (current.type == TokenType.DEF || current.type == TokenType.ASSIGN) {
-                    procDecl();
+                if (current.type == TokenType.DEF || current.type == TokenType.NAME) {
+                    if (current.type == TokenType.DEF) {
+                        procDecl();
+                    } else {
+                        procAssign();
+                    }
                 } else {
                     showError();
                 }
             }
 
-        } else {
-            showError();
         }
 
         eat(TokenType.CLOSE_PAR);
@@ -343,21 +407,23 @@ public class SyntaticAnalysis {
     }
 
     // <expr> ::= <rel> { ('&&' | '||') <rel> }
-    private void procExpr() {
-        procRel();
+    private Expr procExpr() {
+        Expr expr = procRel();
         while (current.type == TokenType.AND ||
                 current.type == TokenType.OR) {
 
             advance();
 
-            procRel();
+            expr = procRel();
         }
+
+        return expr;
     }
 
     // <rel> ::= <cast> [ ('<' | '>' | '<=' | '>=' | '==' | '!=' | in | '!in')
     // <cast> ]
-    private void procRel() {
-        procCast();
+    private Expr procRel() {
+        Expr expr = procCast();
 
         if (current.type == TokenType.LOWER ||
                 current.type == TokenType.GREATER ||
@@ -369,14 +435,16 @@ public class SyntaticAnalysis {
                 current.type == TokenType.NOT_CONTAINS) {
 
             advance();
-            procCast();
+            expr = procCast();
 
         }
+
+        return expr;
     }
 
     // <cast> ::= <arith> [ as ( Boolean | Integer | String) ]
-    private void procCast() {
-        procArith();
+    private Expr procCast() {
+        Expr expr = procArith();
 
         if (current.type == TokenType.AS) {
             advance();
@@ -390,81 +458,96 @@ public class SyntaticAnalysis {
             }
         }
 
+        return expr;
+
     }
 
     // <arith> ::= <term> { ('+' | '-') <term> }
-    private void procArith() {
-        procTerm();
+    private Expr procArith() {
+        Expr expr = procTerm();
 
         while (current.type == TokenType.ADD || current.type == TokenType.SUB) {
             advance();
-            procTerm();
+            expr = procTerm();
         }
 
+        return expr;
     }
 
     // <term> ::= <power> { ('*' | '/' | '%') <power> }
-    private void procTerm() {
-        procPower();
+    private Expr procTerm() {
+        Expr expr = procPower();
 
         while (current.type == TokenType.MUL || current.type == TokenType.DIV || current.type == TokenType.MOD) {
             advance();
-            procPower();
+            expr = procPower();
         }
 
+        return expr;
     }
 
     // <power> ::= <factor> { '**' <factor> }
-    private void procPower() {
-        procFactor();
+    private Expr procPower() {
+        Expr expr = procFactor();
 
         while (current.type == TokenType.POWER) {
             advance();
-            procFactor();
+            expr = procFactor();
         }
+
+        return expr;
     }
 
     // <factor> ::= [ '!' | '-' ] ( '(' <expr> ')' | <rvalue> )
-    private void procFactor() {
+    private Expr procFactor() {
+        Expr expr = null;
         if (current.type == TokenType.NOT || current.type == TokenType.SUB) {
             advance();
         }
 
         if (current.type == TokenType.OPEN_PAR) {
             advance();
-            procExpr();
+            expr = procExpr();
             eat(TokenType.CLOSE_PAR);
         } else {
-            procRvalue();
+            expr = procRvalue();
         }
+
+        return expr;
     }
 
     // <lvalue> ::= <name> { '.' <name> | '[' <expr> ']' }
-    private void procLvalue() {
-        procName();
+    private Variable procLvalue() {
+        Variable var = procName();
 
         while (current.type == TokenType.DOT ||
                 current.type == TokenType.OPEN_BRA) {
             if (current.type == TokenType.DOT) {
                 advance();
-                procName();
+                var = procName();
             } else {
                 advance();
                 procExpr();
                 eat(TokenType.CLOSE_BRA);
             }
         }
+
+        return var;
     }
 
     // <rvalue> ::= <const> | <function> | <switch> | <struct> | <lvalue>
-    private void procRvalue() {
+    private Expr procRvalue() {
+        Expr expr = null;
         switch (current.type) {
             case NULL:
             case FALSE:
             case TRUE:
             case NUMBER:
             case TEXT:
-                procConst();
+                Value<?> value = procConst();
+                int line = lex.getLine();
+                ConstExpr constExpr = new ConstExpr(line, value);
+                expr = constExpr;
                 break;
             case READ:
             case EMPTY:
@@ -479,26 +562,41 @@ public class SyntaticAnalysis {
             case OPEN_BRA:
                 procStruct();
                 break;
+            case NAME:
+                Variable var = procLvalue();
+                expr = var;
+                break;
             default:
-                procLvalue();
+                showError();
         }
+
+        return expr;
     }
 
     // <const> ::= null | false | true | <number> | <text>
-    private void procConst() {
+    private Value<?> procConst() {
+        Value<?> value = null;
         if (current.type == TokenType.NULL) {
             advance();
         } else if (current.type == TokenType.FALSE) {
             advance();
+            BooleanValue bv = new BooleanValue(false);
+            value = bv;
         } else if (current.type == TokenType.TRUE) {
             advance();
+            BooleanValue bv = new BooleanValue(true);
+            value = bv;
         } else if (current.type == TokenType.NUMBER) {
-            procNumber();
+            NumberValue nv = procNumber();
+            value = nv;
         } else if (current.type == TokenType.TEXT) {
-            procText();
+            TextValue tv = procText();
+            value = tv;
         } else {
             showError();
         }
+
+        return value;
     }
 
     // <function> ::= (read | empty | size | keys | values) '(' <expr> ')'
@@ -581,16 +679,34 @@ public class SyntaticAnalysis {
         eat(TokenType.CLOSE_BRA);
     }
 
-    private void procName() {
+    private Variable procName() {
+        String tmp = current.token;
         eat(TokenType.NAME);
+        int line = lex.getLine();
+
+        return new Variable(line, tmp);
     }
 
-    private void procNumber() {
+    private NumberValue procNumber() {
+        String tmp = current.token;
         eat(TokenType.NUMBER);
+
+        int v;
+        try {
+            v = Integer.parseInt(tmp);
+        } catch (Exception err) {
+            v = 0;
+        }
+
+        return new NumberValue(v);
     }
 
-    private void procText() {
+    private TextValue procText() {
+        String tmp = current.token;
+
         eat(TokenType.TEXT);
+
+        return new TextValue(tmp);
     }
 
 }

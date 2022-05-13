@@ -1,5 +1,4 @@
-def a = [1, 2, 3]
-
-foreach (def i in a) {
-    println i
-}
+def a = 2
+def b = 3
+println(a)
+println(b)

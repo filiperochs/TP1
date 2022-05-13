@@ -91,7 +91,7 @@ public class LexicalAnalysis implements AutoCloseable {
                         state = 15;
                     }
 
-                    System.out.println("CASE 1: " + lex.token);
+                    // System.out.println("CASE 1: " + lex.token);
 
                     break;
                 case 2:
@@ -212,7 +212,7 @@ public class LexicalAnalysis implements AutoCloseable {
                         state = 12;
                     } else {
                         ungetc(c);
-                        lex.type = TokenType.INTEGER;
+                        lex.type = TokenType.NUMBER;
                         state = 15;
                     }
 
