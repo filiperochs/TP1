@@ -16,7 +16,7 @@ public class DeclarationType1Command extends DeclarationCommand {
 
   @Override
   public void execute() {
-    Value<?> value = rhs.expr();
+    Value<?> value = (rhs != null ? rhs.expr() : null);
     lhs.setValue(value);
   }
 }

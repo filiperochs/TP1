@@ -1,4 +1,5 @@
-def a = 2
-def b = 3
-println(a)
-println(b)
+// Preencher um arranjo com numeros lidos do teclado.
+
+def a
+
+println('a: ' + !a);

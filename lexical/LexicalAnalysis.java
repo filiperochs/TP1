@@ -219,9 +219,10 @@ public class LexicalAnalysis implements AutoCloseable {
                     break;
                 case 13:
                     if (c != '\'') {
+                        lex.token += (char) c;
                         state = 13;
                     } else {
-                        lex.type = TokenType.STRING;
+                        lex.type = TokenType.TEXT;
                         state = 15;
                     }
 

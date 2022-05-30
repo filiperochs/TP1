@@ -4,6 +4,8 @@ import java.util.List;
 
 import interpreter.expr.Expr;
 import interpreter.expr.Variable;
+import interpreter.util.Utils;
+import interpreter.value.ArrayValue;
 import interpreter.value.Value;
 
 public class DeclarationType2Command extends DeclarationCommand {
@@ -19,8 +21,22 @@ public class DeclarationType2Command extends DeclarationCommand {
   @Override
   public void execute() {
     Value<?> value = rhs.expr();
-    for (Variable v : lhs) {
-      v.setValue(value);
+
+    try {
+      ArrayValue arrayValue = (ArrayValue) value;
+
+      int i = 0;
+
+      for (Variable variable : lhs) {
+        if (!(i >= arrayValue.value().size())) {
+          variable.setValue(arrayValue.value().get(i));
+        } else {
+          variable.setValue(null);
+        }
+        i++;
+      }
+    } catch (Exception e) {
+      Utils.abort(this.getLine());
     }
   }
 
