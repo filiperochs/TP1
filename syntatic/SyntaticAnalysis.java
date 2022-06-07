@@ -361,11 +361,7 @@ public class SyntaticAnalysis {
 
         eat(TokenType.SEMI_COLON);
 
-        Expr expr = null;
-
-        if (current.type != TokenType.SEMI_COLON) {
-            expr = procExpr();
-        }
+        Expr expr = procExpr();
 
         eat(TokenType.SEMI_COLON);
 
@@ -726,7 +722,7 @@ public class SyntaticAnalysis {
 
     // <lvalue> ::= <name> { '.' <name> | '[' <expr> ']' }
     private SetExpr procLvalue() {
-        Variable var = procName();
+        SetExpr base = procName();
 
         while (current.type == TokenType.DOT ||
                 current.type == TokenType.OPEN_BRA) {
@@ -735,18 +731,18 @@ public class SyntaticAnalysis {
                 Variable index = procName();
                 TextValue tv = new TextValue(index.getName());
                 Expr indexExpr = new ConstExpr(lex.getLine(), tv);
-                AccessExpr ae = new AccessExpr(lex.getLine(), var, indexExpr);
-                return ae;
+                AccessExpr ae = new AccessExpr(lex.getLine(), base, indexExpr);
+                base = ae;
             } else {
                 advance();
                 Expr index = procExpr();
                 eat(TokenType.CLOSE_BRA);
-                AccessExpr ae = new AccessExpr(lex.getLine(), var, index);
-                return ae;
+                AccessExpr ae = new AccessExpr(lex.getLine(), base, index);
+                base = ae;
             }
         }
 
-        return var;
+        return base;
     }
 
     // <rvalue> ::= <const> | <function> | <switch> | <struct> | <lvalue>

@@ -1,7 +1,13 @@
 package interpreter.expr;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import interpreter.util.Utils;
+import interpreter.value.ArrayValue;
 import interpreter.value.BooleanValue;
+import interpreter.value.MapValue;
 import interpreter.value.NumberValue;
 import interpreter.value.TextValue;
 import interpreter.value.Value;
@@ -221,18 +227,39 @@ public class BinaryExpr extends Expr {
     Value<?> lvalue = left.expr();
     Value<?> rvalue = right.expr();
 
-    if (!(lvalue instanceof TextValue) || !(rvalue instanceof TextValue)) {
-      Utils.abort(super.getLine());
-      return null;
-    }
+    if (rvalue instanceof ArrayValue) {
+      ArrayValue rarray = (ArrayValue) rvalue;
 
-    TextValue lstr = (TextValue) lvalue;
-    TextValue rstr = (TextValue) rvalue;
+      List<Value<?>> list = rarray.value();
+      boolean b = false;
+      for (Value<?> v : list) {
+        if (v == null) {
+          if (lvalue == null) {
+            b = true;
+            break;
+          }
+        } else if (v.equals(lvalue)) {
+          b = true;
+          break;
+        }
+      }
 
-    if (lstr.value().contains(rstr.value())) {
-      return new BooleanValue(true);
-    } else {
+      return new BooleanValue(b);
+    } else if (rvalue instanceof MapValue) {
+      MapValue rmap = (MapValue) rvalue;
+
+      Map<String, Value<?>> map = rmap.value();
+
+      for (String key : map.keySet()) {
+        if (lvalue != null && lvalue != null && key.equals(lvalue.toString())) {
+          return new BooleanValue(true);
+        }
+      }
+
       return new BooleanValue(false);
+    } else {
+      Utils.abort(this.getLine());
+      return null;
     }
   }
 
@@ -249,7 +276,36 @@ public class BinaryExpr extends Expr {
       return null;
     }
 
-    return new TextValue(lvalue.value().toString() + rvalue.value().toString());
+    if (lvalue instanceof TextValue && rvalue instanceof TextValue) {
+      TextValue lstr = (TextValue) lvalue;
+      TextValue rstr = (TextValue) rvalue;
+
+      return new TextValue(lstr.value() + rstr.value());
+    } else if (lvalue instanceof NumberValue && rvalue instanceof NumberValue) {
+      NumberValue lnum = (NumberValue) lvalue;
+      NumberValue rnum = (NumberValue) rvalue;
+
+      return new NumberValue(lnum.value() + rnum.value());
+    } else if (lvalue instanceof ArrayValue && rvalue instanceof ArrayValue) {
+      ArrayValue larr = (ArrayValue) lvalue;
+      ArrayValue rarr = (ArrayValue) rvalue;
+
+      List<Value<?>> tmp = larr.value();
+      tmp.addAll(rarr.value());
+
+      return new ArrayValue(tmp);
+    } else if (lvalue instanceof MapValue && rvalue instanceof MapValue) {
+      MapValue lmap = (MapValue) lvalue;
+      MapValue rmap = (MapValue) rvalue;
+
+      Map<String, Value<?>> tmp = lmap.value();
+      tmp.putAll(rmap.value());
+
+      return new MapValue(tmp);
+    } else {
+      Utils.abort(super.getLine());
+      return null;
+    }
 
   }
 

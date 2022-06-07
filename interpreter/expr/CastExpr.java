@@ -70,6 +70,8 @@ public class CastExpr extends Expr {
       return new BooleanValue(!((TextValue) v).value().isEmpty());
     } else if (v instanceof BooleanValue) {
       return v;
+    } else if (v == null) {
+      return new BooleanValue(false);
     } else {
       Utils.abort(super.getLine());
       return null;
